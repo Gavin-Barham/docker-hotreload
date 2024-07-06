@@ -9,7 +9,7 @@ Not yet supported:
 Windows 10+ installer
 Linux installer
 ```
-For temporary fix dowload the file, add to your path in your bashrc or zshrc and alias as dhr
+For temporary fix dowload the file, add to your path in your bashrc or zshrc and alias as dhr, or run as a shell script.
 
 ## Usage
 
