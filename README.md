@@ -1,7 +1,20 @@
+## Install
+MacOS: 
+```bash
+  brew tap Gavin-Barham/homebrew-docker-hotreload
+  brew install docker-hotreload
+```
+Not yet supported:
+```
+Windows 10+ installer
+Linux installer
+```
+For temporary fix dowload the file, add to your path in your bashrc or zshrc and alias as dhr
+
 ## Usage
 
 ```bash
-./your_script.sh [-b build_command] [-w watch_path]
+dhr [-b build_command] [-w watch_path]
 ```
 
 ### Options:
@@ -15,7 +28,7 @@
 ### Example:
 
 ```bash
-./your_script.sh -b 'docker build -t my-custom-image .' -w '/path/to/watch'
+dhr -b 'docker build -t my-custom-image .' -w '/path/to/watch'
 ```
 
 ### Dependencies:
