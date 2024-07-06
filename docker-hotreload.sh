@@ -27,23 +27,27 @@ usage() {
 # Ensure file watching dependencies for users OS are installed or supported
 check_dependencies() {
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+
     # Linux
     if ! command -v inotifywait &> /dev/null; then
       echo "  It appears you are using Linux, please install inotify-tools via:"
       echo "    sudo apt-get install inotify-tools"
     fi
   elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS
+  
+    # MacOS
     if ! command -v fswatch &> /dev/null; then
       echo "  It appears you are using macOS, please install fswatch via:"
       echo "    brew install fswatch"
     fi
   elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+
     # Windows using Powershell (assuming PowerShell 7+)
     if ! command -v pwsh &> /dev/null; then
       echo "  It appears you are using Windows, please install PowerShell 7+ via:"
       echo "    https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
     fi
+
   else
     echo "  Unsupported operating system."
   fi
