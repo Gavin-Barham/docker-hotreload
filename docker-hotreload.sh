@@ -171,14 +171,16 @@ trap "echo ''; echo 'Exiting...'; exit 0" SIGINT
 debounce_restart() {
   if [[ -n $DEBOUNCE_PID ]]; then
     kill $DEBOUNCE_PID 2>/dev/null
+    sleep 3
   fi
   (
     if [[ -n $BUILD_PID ]]; then
       kill $BUILD_PID 2>/dev/null
-      sleep 5
+      sleep 3
     fi
     (
       stop_containers
+      sleep 5
       start_containers
     ) &
     BUILD_PID=$!
