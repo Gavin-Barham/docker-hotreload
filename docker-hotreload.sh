@@ -186,8 +186,8 @@ debounce_restart() {
     fi
     (
       stop_containers
-      sleep 5
       start_containers
+      sleep 5
       tail_logs
     ) &
     BUILD_PID=$!
