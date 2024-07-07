@@ -97,6 +97,7 @@ start_containers() {
     echo "Running build command: $build_cmd"
   fi
   eval $build_cmd
+  sleep 10
 }
 
 # Function to stop the containers or processes
@@ -113,6 +114,7 @@ stop_containers() {
     echo "Running stop command: $stop_cmd"
   fi
   eval $stop_cmd
+  sleep 10
 }
 
 # Function to write containers logs to terminal window without blocking script execution
