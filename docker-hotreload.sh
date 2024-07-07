@@ -17,7 +17,7 @@ usage() {
   echo "Dependencies:"
   echo "  Valid dependencies are required for file watching on your system."
   echo "  Linux: inotify-tools."
-  echo "  macOS: fswatch."
+  echo "  MacOS: fswatch."
   echo "  Windows: PowerShell 7+"
   echo "  Other operating systems are not supported."
   check_dependencies
@@ -27,22 +27,25 @@ usage() {
 # Ensure file watching dependencies for users OS are installed or supported
 check_dependencies() {
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
     if ! command -v inotifywait &> /dev/null; then
-      echo "It appears you are using Linux, please install inotify-tools via:"
-      echo "  sudo apt-get install inotify-tools"
+      echo "  It appears you are using Linux, please install inotify-tools via:"
+      echo "    sudo apt-get install inotify-tools"
     fi
   elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # MacOS
     if ! command -v fswatch &> /dev/null; then
-      echo "It appears you are using macOS, please install fswatch via:"
-      echo "  brew install fswatch"
+      echo "  It appears you are using macOS, please install fswatch via:"
+      echo "    brew install fswatch"
     fi
   elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    # Windows using Powershell (assuming PowerShell 7+)
     if ! command -v pwsh &> /dev/null; then
-      echo "It appears you are using Windows, please install PowerShell 7+ via:"
-      echo "  https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
+      echo "  It appears you are using Windows, please install PowerShell 7+ via:"
+      echo "    https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
     fi
   else
-    echo "Unsupported operating system."
+    echo "  Unsupported operating system."
   fi
 }
 
@@ -75,9 +78,11 @@ start_containers() {
   if [[ "$build_cmd" == *"docker-compose"* ]]; then
     container_names=$(docker-compose ps --services)
     echo "Starting containers:"
+
     for container in ${container_names[@]}; do
       echo "    $container"
     done
+
   else
     container_name=$(basename "$build_cmd")
     echo "Starting container: $container_name"
@@ -90,9 +95,11 @@ stop_containers() {
   if [[ "$build_cmd" == *"docker-compose"* ]]; then
     container_names=$(docker-compose ps --services)
     echo "Stopping containers:"
+
     for container in ${container_names[@]}; do
       echo "    $container"
     done
+
     docker-compose down
   else
     container_name=$(basename "$build_cmd")
@@ -105,14 +112,18 @@ stop_containers() {
 tail_logs() {
   container_names=$(docker-compose ps --services)
   echo "Tailing logs from containers:"
+
   for container in ${container_names[@]}; do
     echo "    $container"
   done
+
   docker-compose logs -f &
   LOG_PID=$!
 }
 
+
 # Determine OS and select appropriate file watching library
+  # Linux
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if command -v inotifywait &> /dev/null; then
     WATCH_COMMAND="inotifywait -e close_write -r $watch_path"
@@ -121,6 +132,8 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     check_dependencies
     exit 1
   fi
+
+# macOS
 elif [[ "$OSTYPE" == "darwin"* ]]; then
   if command -v fswatch &> /dev/null; then
     WATCH_COMMAND="fswatch -1 -r $watch_path"
@@ -129,6 +142,8 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     check_dependencies
     exit 1
   fi
+
+# Windows
 elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   if command -v pwsh &> /dev/null; then
     WATCH_COMMAND="pwsh -Command while (\$true) { Wait-FileSystemEvent -Path '$watch_path' -Recursive; Stop-Service docker; Start-Service docker; }"
@@ -137,6 +152,7 @@ elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
     check_dependencies
     exit 1
   fi
+
 else
   echo "Error: Unsupported operating system."
   exit 1
@@ -144,9 +160,10 @@ fi
 
 # Initial start
 start_containers
+tail_logs
 
-# Trap SIGINT (Ctrl+C) to gracefully exit and clean up background processes
-trap "echo ''; echo 'Exiting...'; kill $LOG_PID; exit 0" SIGINT
+# Trap SIGINT (Ctrl+C) to gracefully exit
+trap "echo ''; echo 'Exiting...'; exit 0" SIGINT
 
 # Function to debounce container restart
 debounce_restart() {
@@ -163,6 +180,7 @@ debounce_restart() {
       stop_containers
       sleep 5
       start_containers
+      tail_logs
     ) &
     BUILD_PID=$!
   ) &
@@ -171,7 +189,6 @@ debounce_restart() {
 
 # Watch for changes using selected command
 echo "Watching $watch_path for changes..."
-tail_logs
 while true; do
   eval "$WATCH_COMMAND" | while IFS= read -r line; do
     echo "Detected change in: $line"
