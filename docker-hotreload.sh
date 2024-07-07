@@ -2,17 +2,19 @@
 
 # Default values for optional arguments
 build_cmd="docker-compose up --build -d"
+stop_cmd="docker-compose down"
 watch_path="./src"
 
 # Display usage instructions
 usage() {
-  echo "Usage: ./your_script.sh [-b build_command] [-w watch_path]"
+  echo "Usage: ./your_script.sh [-b build_command] [-s stop_command] [-w watch_path]"
   echo "Options:"
   echo "  -b build_command   Specify a custom build command (default: 'docker-compose up --build -d')"
+  echo "  -s stop_command    Specify a custom stop command (default: 'docker-compose down')"
   echo "  -w watch_path      Specify a custom watch path (default: './src')"
   echo
   echo "Example:"
-  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -w '/path/to/watch'"
+  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -s 'docker stop my-custom-image' -w '/path/to/watch'"
   echo
   echo "Dependencies:"
   echo "  Valid dependencies are required for file watching on your system."
@@ -50,10 +52,13 @@ check_dependencies() {
 }
 
 # Parse optional arguments
-while getopts "b:w:h" opt; do
+while getopts "b:s:w:h" opt; do
   case ${opt} in
     b )
       build_cmd=$OPTARG
+      ;;
+    s )
+      stop_cmd=$OPTARG
       ;;
     w )
       watch_path=$OPTARG
@@ -68,9 +73,14 @@ while getopts "b:w:h" opt; do
   esac
 done
 
-# Ensure build_cmd contains the -d flag
-if [[ "$build_cmd" != *"-d"* ]]; then
-  build_cmd="$build_cmd -d"
+# Ensure build_cmd contains the -d flag if it is docker or docker-compose command
+if [[ "$build_cmd" == *"docker-compose"* || "$build_cmd" == *"docker"* ]]; then
+  if [[ "$build_cmd" != *"-d"* ]]; then
+    build_cmd="$build_cmd -d"
+  fi
+elif [[ -z "$stop_cmd" ]]; then
+  echo "Error: -s stop_command is required if build_command is not a Docker or docker-compose command"
+  usage
 fi
 
 # Function to start and build the containers
@@ -84,15 +94,14 @@ start_containers() {
     done
 
   else
-    container_name=$(basename "$build_cmd")
-    echo "Starting container: $container_name"
+    echo "Running build command: $build_cmd"
   fi
-  $build_cmd
+  eval $build_cmd
 }
 
-# Function to stop the containers
+# Function to stop the containers or processes
 stop_containers() {
-  if [[ "$build_cmd" == *"docker-compose"* ]]; then
+  if [[ "$stop_cmd" == *"docker-compose"* ]]; then
     container_names=$(docker-compose ps --services)
     echo "Stopping containers:"
 
@@ -100,27 +109,26 @@ stop_containers() {
       echo "    $container"
     done
 
-    docker-compose down
   else
-    container_name=$(basename "$build_cmd")
-    echo "Stopping container: $container_name"
-    docker stop $container_name
+    echo "Running stop command: $stop_cmd"
   fi
+  eval $stop_cmd
 }
 
 # Function to write containers logs to terminal window without blocking script execution
 tail_logs() {
-  container_names=$(docker-compose ps --services)
-  echo "Tailing logs from containers:"
+  if [[ "$build_cmd" == *"docker-compose"* ]]; then
+    container_names=$(docker-compose ps --services)
+    echo "Tailing logs from containers:"
 
-  for container in ${container_names[@]}; do
-    echo "    $container"
-  done
+    for container in ${container_names[@]}; do
+      echo "    $container"
+    done
 
-  docker-compose logs -f &
-  LOG_PID=$!
+    docker-compose logs -f &
+    LOG_PID=$!
+  fi
 }
-
 
 # Determine OS and select appropriate file watching library
   # Linux
