@@ -173,9 +173,9 @@ debounce_restart() {
     kill $DEBOUNCE_PID 2>/dev/null
   fi
   (
+    sleep 5
     if [[ -n $BUILD_PID ]]; then
       kill $BUILD_PID 2>/dev/null
-      sleep 5
     fi
     (
       stop_containers
