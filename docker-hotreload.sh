@@ -2,19 +2,17 @@
 
 # Default values for optional arguments
 build_cmd="docker-compose up --build -d"
-stop_cmd=""
 watch_path="./src"
 
 # Display usage instructions
 usage() {
-  echo "Usage: ./your_script.sh [-b build_command] [-s stop_command] [-w watch_path]"
+  echo "Usage: ./your_script.sh [-b build_command] [-w watch_path]"
   echo "Options:"
   echo "  -b build_command   Specify a custom build command (default: 'docker-compose up --build -d')"
-  echo "  -s stop_command    Specify a custom stop command"
   echo "  -w watch_path      Specify a custom watch path (default: './src')"
   echo
   echo "Example:"
-  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -s 'docker stop my-custom-image' -w '/path/to/watch'"
+  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -w '/path/to/watch'"
   echo
   echo "Dependencies:"
   echo "  Valid dependencies are required for file watching on your system."
@@ -29,36 +27,37 @@ usage() {
 # Ensure file watching dependencies for users OS are installed or supported
 check_dependencies() {
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+
     # Linux
     if ! command -v inotifywait &> /dev/null; then
       echo "  It appears you are using Linux, please install inotify-tools via:"
       echo "    sudo apt-get install inotify-tools"
     fi
   elif [[ "$OSTYPE" == "darwin"* ]]; then
+  
     # MacOS
     if ! command -v fswatch &> /dev/null; then
       echo "  It appears you are using macOS, please install fswatch via:"
       echo "    brew install fswatch"
     fi
   elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+
     # Windows using Powershell (assuming PowerShell 7+)
     if ! command -v pwsh &> /dev/null; then
       echo "  It appears you are using Windows, please install PowerShell 7+ via:"
       echo "    https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
     fi
+
   else
     echo "  Unsupported operating system."
   fi
 }
 
 # Parse optional arguments
-while getopts "b:s:w:h" opt; do
+while getopts "b:w:h" opt; do
   case ${opt} in
     b )
       build_cmd=$OPTARG
-      ;;
-    s )
-      stop_cmd=$OPTARG
       ;;
     w )
       watch_path=$OPTARG
@@ -73,14 +72,9 @@ while getopts "b:s:w:h" opt; do
   esac
 done
 
-# Ensure build_cmd contains the -d flag if it is docker or docker-compose command
-if [[ "$build_cmd" == *"docker-compose"* || "$build_cmd" == *"docker"* ]]; then
-  if [[ "$build_cmd" != *"-d"* ]]; then
-    build_cmd="$build_cmd -d"
-  fi
-elif [[ -z "$stop_cmd" ]]; then
-  echo "Error: -s stop_command is required if build_command is not a Docker command"
-  usage
+# Ensure build_cmd contains the -d flag
+if [[ "$build_cmd" != *"-d"* ]]; then
+  build_cmd="$build_cmd -d"
 fi
 
 # Function to start and build the containers
@@ -94,15 +88,15 @@ start_containers() {
     done
 
   else
-    echo "Running build command: $build_cmd"
+    container_name=$(basename "$build_cmd")
+    echo "Starting container: $container_name"
   fi
-  eval $build_cmd
-  sleep 10
+  $build_cmd
 }
 
-# Function to stop the containers or processes
+# Function to stop the containers
 stop_containers() {
-  if [[ "$stop_cmd" == *"docker-compose"* ]]; then
+  if [[ "$build_cmd" == *"docker-compose"* ]]; then
     container_names=$(docker-compose ps --services)
     echo "Stopping containers:"
 
@@ -110,27 +104,26 @@ stop_containers() {
       echo "    $container"
     done
 
+    docker-compose down
   else
-    echo "Running stop command: $stop_cmd"
+    container_name=$(basename "$build_cmd")
+    echo "Stopping container: $container_name"
+    docker stop $container_name
   fi
-  eval $stop_cmd
-  sleep 10
 }
 
 # Function to write containers logs to terminal window without blocking script execution
 tail_logs() {
-  if [[ "$build_cmd" == *"docker-compose"* ]]; then
-    container_names=$(docker-compose ps --services)
-    echo "Tailing logs from containers:"
+  container_names=$(docker-compose ps --services)
+  echo "Tailing logs from containers:"
 
-    for container in ${container_names[@]}; do
-      echo "    $container"
-    done
+  for container in ${container_names[@]}; do
+    echo "    $container"
+  done
 
-    docker-compose logs -f &
-    LOG_PID=$!
-  fi
+  docker-compose logs -f
 }
+
 
 # Determine OS and select appropriate file watching library
   # Linux
@@ -170,7 +163,6 @@ fi
 
 # Initial start
 start_containers
-tail_logs
 
 # Trap SIGINT (Ctrl+C) to gracefully exit
 trap "echo ''; echo 'Exiting...'; exit 0" SIGINT
@@ -181,15 +173,14 @@ debounce_restart() {
     kill $DEBOUNCE_PID 2>/dev/null
   fi
   (
-    sleep 5
     if [[ -n $BUILD_PID ]]; then
       kill $BUILD_PID 2>/dev/null
+      sleep 5
     fi
     (
-      sleep 2
       stop_containers
       start_containers
-      tail_logs
+      tail_logs &
     ) &
     BUILD_PID=$!
   ) &
@@ -199,8 +190,10 @@ debounce_restart() {
 # Watch for changes using selected command
 echo "Watching $watch_path for changes..."
 while true; do
+  tail_logs &
   eval "$WATCH_COMMAND" | while IFS= read -r line; do
     echo "Detected change in: $line"
+    kill $(jobs -p) # Kill previous tail_logs
     debounce_restart
   done
 done
