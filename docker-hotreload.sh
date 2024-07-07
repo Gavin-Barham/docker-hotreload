@@ -2,19 +2,17 @@
 
 # Default values for optional arguments
 build_cmd="docker-compose up --build -d"
-stop_cmd="docker-compose down"
 watch_path="./src"
 
 # Display usage instructions
 usage() {
-  echo "Usage: ./your_script.sh [-b build_command] [-s stop_command] [-w watch_path]"
+  echo "Usage: ./your_script.sh [-b build_command] [-w watch_path]"
   echo "Options:"
   echo "  -b build_command   Specify a custom build command (default: 'docker-compose up --build -d')"
-  echo "  -s stop_command    Specify a custom stop command (default: 'docker-compose down')"
   echo "  -w watch_path      Specify a custom watch path (default: './src')"
   echo
   echo "Example:"
-  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -s 'docker stop my-custom-image' -w '/path/to/watch'"
+  echo "  ./your_script.sh -b 'docker build -t my-custom-image .' -w '/path/to/watch'"
   echo
   echo "Dependencies:"
   echo "  Valid dependencies are required for file watching on your system."
@@ -35,7 +33,7 @@ check_dependencies() {
       echo "    sudo apt-get install inotify-tools"
     fi
   elif [[ "$OSTYPE" == "darwin"* ]]; then
-    # MacOS
+    # macOS
     if ! command -v fswatch &> /dev/null; then
       echo "  It appears you are using macOS, please install fswatch via:"
       echo "    brew install fswatch"
@@ -52,13 +50,10 @@ check_dependencies() {
 }
 
 # Parse optional arguments
-while getopts "b:s:w:h" opt; do
+while getopts "b:w:h" opt; do
   case ${opt} in
     b )
       build_cmd=$OPTARG
-      ;;
-    s )
-      stop_cmd=$OPTARG
       ;;
     w )
       watch_path=$OPTARG
@@ -73,14 +68,9 @@ while getopts "b:s:w:h" opt; do
   esac
 done
 
-# Ensure build_cmd contains the -d flag if it is docker or docker-compose command
-if [[ "$build_cmd" == *"docker-compose"* || "$build_cmd" == *"docker"* ]]; then
-  if [[ "$build_cmd" != *"-d"* ]]; then
-    build_cmd="$build_cmd -d"
-  fi
-elif [[ -z "$stop_cmd" ]]; then
-  echo "Error: -s stop_command is required if build_command is not a Docker or docker-compose command"
-  usage
+# Ensure build_cmd contains the -d flag
+if [[ "$build_cmd" != *"-d"* ]]; then
+  build_cmd="$build_cmd -d"
 fi
 
 # Function to start and build the containers
@@ -94,14 +84,15 @@ start_containers() {
     done
 
   else
-    echo "Running build command: $build_cmd"
+    container_name=$(basename "$build_cmd")
+    echo "Starting container: $container_name"
   fi
-  eval $build_cmd
+  $build_cmd
 }
 
-# Function to stop the containers or processes
+# Function to stop the containers
 stop_containers() {
-  if [[ "$stop_cmd" == *"docker-compose"* ]]; then
+  if [[ "$build_cmd" == *"docker-compose"* ]]; then
     container_names=$(docker-compose ps --services)
     echo "Stopping containers:"
 
@@ -109,29 +100,28 @@ stop_containers() {
       echo "    $container"
     done
 
+    docker-compose down
   else
-    echo "Running stop command: $stop_cmd"
+    container_name=$(basename "$build_cmd")
+    echo "Stopping container: $container_name"
+    docker stop $container_name
   fi
-  eval $stop_cmd
 }
 
 # Function to write containers logs to terminal window without blocking script execution
 tail_logs() {
-  if [[ "$build_cmd" == *"docker-compose"* ]]; then
-    container_names=$(docker-compose ps --services)
-    echo "Tailing logs from containers:"
+  container_names=$(docker-compose ps --services)
+  echo "Tailing logs from containers:"
 
-    for container in ${container_names[@]}; do
-      echo "    $container"
-    done
+  for container in ${container_names[@]}; do
+    echo "    $container"
+  done
 
-    docker-compose logs -f &
-    LOG_PID=$!
-  fi
+  docker-compose logs -f &
 }
 
 # Determine OS and select appropriate file watching library
-  # Linux
+# Linux
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if command -v inotifywait &> /dev/null; then
     WATCH_COMMAND="inotifywait -e close_write -r $watch_path"
@@ -177,17 +167,15 @@ trap "echo ''; echo 'Exiting...'; exit 0" SIGINT
 debounce_restart() {
   if [[ -n $DEBOUNCE_PID ]]; then
     kill $DEBOUNCE_PID 2>/dev/null
-    sleep 3
   fi
   (
+    sleep 5
     if [[ -n $BUILD_PID ]]; then
       kill $BUILD_PID 2>/dev/null
-      sleep 3
     fi
     (
       stop_containers
       start_containers
-      sleep 5
       tail_logs
     ) &
     BUILD_PID=$!
@@ -201,6 +189,9 @@ while true; do
   eval "$WATCH_COMMAND" | while IFS= read -r line; do
     echo "Detected change in: $line"
     debounce_restart
+  done
+done
+
   done
 done
 
